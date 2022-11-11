@@ -1,40 +1,50 @@
-import matlab
-import matplotlib
 import math
-import numpy as np
+
+import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib import colors
 from scipy import interpolate
+from scipy.integrate import quad
 
 width, height = 13, 13 # matrix dimensions
 a, b = 6, 6 # center coordinates
 r = 6 # radius
+j = 10 # number of relaxations
     
 def function(x, y):
-    value = (x-8)**2 - (y+1)**2 # arbitrary function to modify
+    value = x**2 # arbitrary function to modify
     return value
     
     
+def error(matrix):
+    exp_value = matrix[6,6]
+    exact_value = (1/(2*math.pi)*quad(integrand, 0, 2*math.pi)[0])
+    error = abs(exp_value - exact_value)
+    mmax = matrix.max()
+    mmin = matrix.min()
+    error = error / abs(mmax - mmin)
+    return error
+
+def integrand(t):
+    return function(math.cos(t),math.sin(t))
+    
 def matrix_initialization():
+    
+    exact_value = (1/(2*math.pi)*quad(integrand, 0, 2*math.pi)[0])
     
     #initialize the matrices
     force_matrix = np.zeros((width,height))
     
-    matrix = np.zeros((width,height))
     ref_matrix = np.zeros((width,height))
     
     for y in range(height):
         for x in range(width):
             # Fill within the boundaries of the circle
             if (x-a)**2 + (y-b)**2 - r**2 < r:
-                force_matrix[y,x] = 1
-            
-            # The following else block maps the points outside the boundary to None.
-            # However, this implementation is not supported by the interpolation function interpolate.interp2d(), so we only
-            # use it for the plotting onto the coarse-grid unit disk. In that case, those points remain mapped to 0.
-            
-            #else:
-            #    force_matrix[y,x] = None
+                force_matrix[y,x] = exact_value
+            else:
+                force_matrix[y,x] = None
             
                 
             # Map the function on the boundaries
@@ -47,13 +57,12 @@ def matrix_initialization():
                 ref_matrix[y,x] = 1
             
     
-    return ref_matrix, force_matrix, matrix
+    return ref_matrix, force_matrix
 
-def pascal(ref_matrix, force_matrix, matrix):
+def pascal(ref_matrix, force_matrix, j):
     
     i = 0
-    
-    while(i < 1000):
+    while(i < j):
         for y in range(height):
             for x in range(width):
                 if force_matrix[y,x] > 0:
@@ -62,21 +71,35 @@ def pascal(ref_matrix, force_matrix, matrix):
                         force_matrix[y,x] = new_approx
 
         i += 1
-
+        
     # The following lines of code plot the harmonic function on the coarse-grid unit disk
-
-    #plt.imshow(force_matrix, cmap = 'gist_rainbow', interpolation = 'nearest')
-    #plt.title("Harmonic Function on Coarse-Grid Unit Disk with Boundary Function f(x,y) = (x-8)^2 - (y+1)^2")
-    #plt.colorbar()
-    #plt.xlabel("x")
-    #plt.ylabel("y")
-    #plt.show()
+    
+    fig, ax = plt.subplots()
+    plt.imshow(force_matrix, cmap = 'gist_rainbow', interpolation = 'nearest')
+    plt.suptitle("Harmonic Function on Coarse-Grid Unit Disk with f(x,y) = sin(xy)")
+    plt.title("Number of Relaxations: " + str(j), fontsize = 12)
+    plt.colorbar()
+    plt.xlabel("x")
+    plt.ylabel("y")
+    
+    plt.show()
     
     return force_matrix
 
-def interpolation(matrix):
+
+def interpolation(matrix, j):
+    
+    # Replace all "None" cells with 0's to support use of interp2d function
+    
+    for y in range(height):
+        for x in range(width):
+            if np.isnan(matrix[y,x]):
+                matrix[y,x] = 0
+    
     x = np.linspace(0, width, width)
     y = np.linspace(0, height, height)
+    
+    err = error(matrix)
     
     f = interpolate.interp2d(x, y, matrix, kind = 'linear')
     
@@ -91,18 +114,18 @@ def interpolation(matrix):
     
     plt.pcolormesh(xv, yv, f(xv, yv), clip_path=(circle, ax.transAxes), cmap = 'gist_rainbow')
     plt.colorbar()
-    plt.title("Harmonic Function on Unit Disk with Boundary Function f(x,y) = (x-8)^2 - (y+1)^2")
+    plt.title("Error at center with respect to range: " + str(round(err,5))+ ";   Number of Relaxations: " + str(j), fontsize = 12)
+    plt.suptitle("Harmonic Function on Unit Disk with f(x,y) = x**2\n")
     plt.xlabel("x")
     plt.ylabel("y")
 
     plt.show()
     
 
-
-def main():
-    ref_matrix, force_matrix, matrix = matrix_initialization()
-    force_matrix = pascal(ref_matrix, force_matrix, matrix)
-    interpolation(force_matrix)
+def main(j):
+    ref_matrix, force_matrix = matrix_initialization()
+    force_matrix = pascal(ref_matrix, force_matrix, j)
+    interpolation(force_matrix, j)
     
+main(j)
     
-main()
